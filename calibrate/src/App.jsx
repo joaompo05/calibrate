@@ -69,6 +69,8 @@ const STOCK_META = {
 
 const LOGOS = {
   AMZN: "https://logo.clearbit.com/amazon.com",
+  GOOGL: "https://logo.clearbit.com/google.com",
+  GOOG: "https://logo.clearbit.com/google.com",
   COIN: "https://logo.clearbit.com/coinbase.com",
   AAPL: "https://logo.clearbit.com/apple.com",
   MSFT: "https://logo.clearbit.com/microsoft.com",
@@ -77,6 +79,7 @@ const LOGOS = {
   TSLA: "https://logo.clearbit.com/tesla.com",
   SXR8: "https://logo.clearbit.com/ishares.com",
   SXRV: "https://logo.clearbit.com/ishares.com",
+  CNDX: "https://logo.clearbit.com/ishares.com",
   VUAA: "https://logo.clearbit.com/vanguard.com",
 };
 
@@ -96,10 +99,10 @@ const FALLBACK_PRICES = {
 };
 
 const DEFAULT_POSITIONS = [
-  { id: 1, ticker: "SXR8", name: "iShares Core S&P 500", type: "ETF", shares: "4.2", buyPrice: "520", fallbackPrice: "595", useLivePrice: true, conviction: "High" },
-  { id: 2, ticker: "SXRV", name: "iShares NASDAQ 100", type: "ETF", shares: "2.4", buyPrice: "610", fallbackPrice: "675", useLivePrice: true, conviction: "High" },
-  { id: 3, ticker: "AMZN", name: "Amazon", type: "Stock", shares: "3", buyPrice: "170", fallbackPrice: "200", useLivePrice: true, conviction: "High" },
-  { id: 4, ticker: "COIN", name: "Coinbase", type: "Stock", shares: "2", buyPrice: "160", fallbackPrice: "245", useLivePrice: true, conviction: "Exploratory" },
+  { id: 1, ticker: "SXR8", name: "iShares Core S&P 500", type: "ETF", shares: "4.2", buyPrice: "520", fallbackPrice: "595", useLivePrice: true, conviction: "High", purchaseDate: "2025-01-15" },
+  { id: 2, ticker: "SXRV", name: "iShares NASDAQ 100", type: "ETF", shares: "2.4", buyPrice: "610", fallbackPrice: "675", useLivePrice: true, conviction: "High", purchaseDate: "2025-02-10" },
+  { id: 3, ticker: "AMZN", name: "Amazon", type: "Stock", shares: "3", buyPrice: "170", fallbackPrice: "200", useLivePrice: true, conviction: "High", purchaseDate: "2025-03-05" },
+  { id: 4, ticker: "COIN", name: "Coinbase", type: "Stock", shares: "2", buyPrice: "160", fallbackPrice: "245", useLivePrice: true, conviction: "Exploratory", purchaseDate: "2025-04-01" },
 ];
 
 const DEFAULT_TARGETS = [
@@ -191,6 +194,40 @@ function createHistory(total) {
   });
 }
 
+function buildPortfolioHistoryFromPurchaseDates(positions, prices) {
+  const datedPositions = positions
+    .filter((position) => position.purchaseDate)
+    .map((position) => ({ ...position, purchaseTime: new Date(position.purchaseDate).getTime() }))
+    .filter((position) => Number.isFinite(position.purchaseTime));
+
+  if (!datedPositions.length) {
+    const total = positions.reduce((sum, position) => sum + positionValue(position, prices), 0);
+    return createHistory(total);
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const today = new Date(todayKey()).getTime();
+  const earliest = Math.min(...datedPositions.map((position) => position.purchaseTime));
+  const days = Math.max(1, Math.min(730, Math.round((today - earliest) / dayMs) + 1));
+
+  return Array.from({ length: days }, (_, index) => {
+    const currentTime = earliest + index * dayMs;
+    const value = datedPositions.reduce((sum, position) => {
+      if (position.purchaseTime > currentTime) return sum;
+      const shares = n(position.shares);
+      const buyPrice = n(position.buyPrice);
+      const currentPrice = getPrice(position, prices);
+      const elapsed = Math.max(currentTime - position.purchaseTime, 0);
+      const totalElapsed = Math.max(today - position.purchaseTime, dayMs);
+      const progress = Math.min(elapsed / totalElapsed, 1);
+      const interpolatedPrice = buyPrice + (currentPrice - buyPrice) * progress;
+      return sum + shares * interpolatedPrice;
+    }, 0);
+
+    return { date: new Date(currentTime).toISOString().slice(0, 10), value };
+  });
+}
+
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth <= 760 : false);
 
@@ -237,9 +274,7 @@ function Logo({ ticker, type, size = 44 }) {
   const [failed, setFailed] = useState(false);
   const cleanTicker = String(ticker || "").toUpperCase();
   const source = LOGOS[cleanTicker];
-  const provider = ETF_DATA[cleanTicker]?.provider;
   const isETF = type === "ETF";
-  const fallbackLabel = isETF ? provider || cleanTicker : cleanTicker;
 
   return (
     <div
@@ -254,7 +289,7 @@ function Logo({ ticker, type, size = 44 }) {
         flex: "0 0 auto",
         border: `1px solid ${UI.border}`,
       }}
-      title={isETF ? `${cleanTicker} · ${provider || "ETF"}` : cleanTicker}
+      title={isETF ? `${cleanTicker} · ${ETF_DATA[cleanTicker]?.provider || "ETF"}` : cleanTicker}
     >
       {source && !failed ? (
         <img
@@ -262,24 +297,24 @@ function Logo({ ticker, type, size = 44 }) {
           alt={cleanTicker}
           onError={() => setFailed(true)}
           style={{
-            width: isETF ? "82%" : "72%",
-            height: isETF ? "82%" : "72%",
+            width: "75%",
+            height: "75%",
             objectFit: "contain",
             borderRadius: 8,
-            background: isETF ? "white" : "transparent",
-            padding: isETF ? 3 : 0,
+            background: "white",
+            padding: 4,
           }}
         />
       ) : (
         <span
           style={{
             fontWeight: 700,
-            fontSize: isETF ? Math.max(size * 0.22, 10) : Math.max(size * 0.24, 10),
-            color: isETF ? UI.blue : UI.text,
+            fontSize: Math.max(size * 0.24, 10),
+            color: UI.text,
             letterSpacing: -0.2,
           }}
         >
-          {fallbackLabel}
+          {cleanTicker}
         </span>
       )}
     </div>
@@ -292,11 +327,7 @@ function StatusPill({ status }) {
   return <span style={{ color, fontSize: 12, padding: "4px 8px", background: `${color}18`, borderRadius: 999 }}>{label}</span>;
 }
 
-function ConvictionPill({ conviction }) {
-  const normalized = conviction || "Medium";
-  const color = normalized === "High" ? UI.green : normalized === "Exploratory" ? UI.orange : UI.blue;
-  return <span style={{ color, fontSize: 12, padding: "4px 8px", background: `${color}18`, borderRadius: 999 }}>{normalized}</span>;
-}
+
 
 function PortfolioChart({ history, totalValue, addSnapshot }) {
   const isMobile = useIsMobile();
@@ -335,8 +366,8 @@ function PortfolioChart({ history, totalValue, addSnapshot }) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
         <div>
           <div style={{ color: UI.muted, fontSize: 15 }}>Portfolio</div>
-          <div style={{ fontSize: "clamp(42px, 7vw, 66px)", fontWeight: 600, letterSpacing: -2, marginTop: 4 }}>{money(displayedValue)}</div>
-          <div style={{ color: positive ? UI.green : UI.red, fontSize: 17, marginTop: 6 }}>{positive ? "+" : ""}{money(change)} ({positive ? "+" : ""}{pct(changePct)})</div>
+          <div style={{ fontSize: "clamp(42px, 7vw, 66px)", fontWeight: 600, letterSpacing: -2, marginTop: 4, lineHeight: 1.02 }}>{money(displayedValue)}</div>
+          <div style={{ color: positive ? UI.green : UI.red, fontSize: 17, marginTop: 12, lineHeight: 1.25 }}>{positive ? "+" : ""}{money(change)} ({positive ? "+" : ""}{pct(changePct)})</div>
         </div>
         <button onClick={addSnapshot} style={{ alignSelf: "start", border: 0, background: UI.card2, color: UI.blue, borderRadius: 999, padding: "10px 14px", fontSize: 15, cursor: "pointer" }}>Save Snapshot</button>
       </div>
@@ -402,7 +433,7 @@ function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta 
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 17, fontWeight: 600 }}>{position.ticker}</div>
                     <div style={{ color: UI.muted, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{position.name} · {pct(position.percent)}</div>
-                    <div style={{ marginTop: 5, display: "flex", gap: 6, flexWrap: "wrap" }}><StatusPill status={meta.status} /><ConvictionPill conviction={position.conviction} /></div>
+                    <div style={{ marginTop: 5, display: "flex", gap: 6, flexWrap: "wrap" }}><StatusPill status={meta.status} /></div>
                   </div>
                 </div>
                 <div style={{ textAlign: isMobile ? "left" : "right" }}>
@@ -422,11 +453,7 @@ function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta 
                 <Input type="number" value={position.shares} onChange={(event) => updatePosition(position.id, "shares", event.target.value)} placeholder="Shares" />
                 <Input type="number" value={position.buyPrice} onChange={(event) => updatePosition(position.id, "buyPrice", event.target.value)} placeholder="Avg cost" />
                 <Input type="number" value={position.fallbackPrice} onChange={(event) => updatePosition(position.id, "fallbackPrice", event.target.value)} placeholder="Fallback" />
-                <Select value={position.conviction || "Medium"} onChange={(event) => updatePosition(position.id, "conviction", event.target.value)}>
-                  <option>High</option>
-                  <option>Medium</option>
-                  <option>Exploratory</option>
-                </Select>
+                <Input type="date" value={position.purchaseDate || ""} onChange={(event) => updatePosition(position.id, "purchaseDate", event.target.value)} placeholder="Purchase date" />
                 <button onClick={() => deletePosition(position.id)} style={{ border: 0, background: UI.card2, color: UI.red, borderRadius: 12, height: 42, cursor: "pointer" }}>×</button>
               </div>
             )}
@@ -539,6 +566,32 @@ function getExposure(positions, prices, key) {
   return Object.entries(output).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
 
+function calculateEtfOverlap(inputs) {
+  const normalized = inputs
+    .map((item) => ({ ticker: String(item.ticker || "").trim().toUpperCase(), percent: n(item.percent) }))
+    .filter((item) => item.ticker && item.percent > 0 && ETF_DATA[item.ticker]?.holdings);
+
+  const contributions = {};
+  normalized.forEach((etf) => {
+    Object.entries(ETF_DATA[etf.ticker].holdings).forEach(([holding, holdingWeight]) => {
+      if (!contributions[holding]) contributions[holding] = [];
+      contributions[holding].push({ etf: etf.ticker, contribution: (etf.percent * holdingWeight) / 100 });
+    });
+  });
+
+  const rows = Object.entries(contributions)
+    .map(([holding, sources]) => {
+      const total = sources.reduce((sum, source) => sum + source.contribution, 0);
+      const duplicated = sources.length > 1 ? total : 0;
+      return { holding, sources, total, duplicated };
+    })
+    .filter((row) => row.sources.length > 1)
+    .sort((a, b) => b.duplicated - a.duplicated);
+
+  const totalOverlap = rows.reduce((sum, row) => sum + row.duplicated, 0);
+  return { rows, totalOverlap, etfCount: normalized.length };
+}
+
 function MetricStrip({ totalValue, totalProfit, totalProfitPercent, riskScore, techExposure, top3Weight, hitRate }) {
   const metrics = [
     { label: "Value", value: money(totalValue), tone: UI.text },
@@ -580,6 +633,9 @@ function Dashboard({ totalValue, totalProfit, totalProfitPercent, allocation, hi
           <div style={{ color: UI.muted, margin: "6px 0 14px" }}>{riskLabel} risk</div>
           <Bar value={riskScore} color={riskLabel === "High" ? UI.red : riskLabel === "Medium" ? UI.orange : UI.green} />
           <p style={{ color: UI.muted, lineHeight: 1.6 }}>Top 3: {pct(top3Weight)}<br />Tech: {pct(techExposure)}<br />Hit rate: {pct(hitRate)}</p>
+          <div style={{ marginTop: 14, padding: 14, borderRadius: 16, background: UI.card2, color: UI.muted, fontSize: 13, lineHeight: 1.5 }}>
+            Risk combines concentration, top holding weight and tech exposure. Hit rate is closed predictions marked as Hit divided by all closed predictions.
+          </div>
         </Card>
       </div>
       </section>
@@ -605,10 +661,10 @@ function PortfolioPanel({ form, setForm, addPosition, allocation, updatePosition
           <Input placeholder="Ticker" value={form.ticker} onChange={(event) => setForm({ ...form, ticker: event.target.value })} />
           <Input placeholder="Name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           <Select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}><option>Stock</option><option>ETF</option><option>Crypto</option><option>Cash</option></Select>
-          <Select value={form.conviction || "Medium"} onChange={(event) => setForm({ ...form, conviction: event.target.value })}><option>High</option><option>Medium</option><option>Exploratory</option></Select>
           <Input type="number" placeholder="Shares" value={form.shares} onChange={(event) => setForm({ ...form, shares: event.target.value })} />
           <Input type="number" placeholder="Buy price" value={form.buyPrice} onChange={(event) => setForm({ ...form, buyPrice: event.target.value })} />
           <Input type="number" placeholder="Fallback price" value={form.fallbackPrice} onChange={(event) => setForm({ ...form, fallbackPrice: event.target.value })} />
+          <Input type="date" placeholder="Purchase date" value={form.purchaseDate} onChange={(event) => setForm({ ...form, purchaseDate: event.target.value })} />
           <button onClick={addPosition} style={{ border: 0, borderRadius: 14, background: UI.blue, color: "white", fontSize: 15, cursor: "pointer" }}>{existing ? "Add to Position" : "Add"}</button>
         </div>
         {existing && addedShares > 0 && (
@@ -624,6 +680,50 @@ function PortfolioPanel({ form, setForm, addPosition, allocation, updatePosition
         )}
       </Card>
       <PositionsTable allocation={allocation} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />
+    </section>
+  );
+}
+
+function OverlapPanel({ overlapInputs, setOverlapInputs }) {
+  const result = useMemo(() => calculateEtfOverlap(overlapInputs), [overlapInputs]);
+
+  return (
+    <section style={{ display: "grid", gridTemplateColumns: "minmax(320px, .8fr) minmax(0, 1.2fr)", gap: 16 }}>
+      <Card style={{ padding: 22 }}>
+        <h2 style={{ marginTop: 0 }}>ETF Overlap</h2>
+        <p style={{ color: UI.muted, lineHeight: 1.5 }}>Add the ETFs and target weights you want to compare. The app estimates which underlying stocks are repeated across ETFs.</p>
+        {overlapInputs.map((item) => (
+          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 90px 42px", gap: 8, marginBottom: 8 }}>
+            <Input value={item.ticker} placeholder="ETF" onChange={(event) => setOverlapInputs((current) => current.map((x) => x.id === item.id ? { ...x, ticker: event.target.value.toUpperCase() } : x))} />
+            <Input type="number" value={item.percent} placeholder="%" onChange={(event) => setOverlapInputs((current) => current.map((x) => x.id === item.id ? { ...x, percent: event.target.value } : x))} />
+            <button onClick={() => setOverlapInputs((current) => current.filter((x) => x.id !== item.id))} style={{ border: 0, borderRadius: 14, background: UI.card2, color: UI.red, cursor: "pointer" }}>×</button>
+          </div>
+        ))}
+        <button onClick={() => setOverlapInputs((current) => [...current, { id: Date.now(), ticker: "", percent: "" }])} style={{ marginTop: 8, border: 0, borderRadius: 14, background: UI.blue, color: "white", padding: "12px 14px", cursor: "pointer" }}>Add ETF</button>
+      </Card>
+
+      <Card style={{ padding: 22 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "start", marginBottom: 18 }}>
+          <div>
+            <h2 style={{ margin: 0 }}>Overlap Result</h2>
+            <div style={{ color: UI.muted, marginTop: 4 }}>{result.etfCount} ETFs compared</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ color: UI.muted, fontSize: 13 }}>Duplicated exposure</div>
+            <div style={{ color: result.totalOverlap > 50 ? UI.orange : UI.green, fontSize: 28, fontWeight: 700 }}>{pct(result.totalOverlap)}</div>
+          </div>
+        </div>
+        {result.rows.slice(0, 12).map((row) => (
+          <div key={row.holding} style={{ padding: "12px 0", borderTop: `1px solid ${UI.border}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontWeight: 650 }}>{row.holding}</span>
+              <span>{pct(row.total)}</span>
+            </div>
+            <div style={{ color: UI.muted, fontSize: 13 }}>{row.sources.map((source) => `${source.etf}: ${pct(source.contribution)}`).join(" · ")}</div>
+          </div>
+        ))}
+        {!result.rows.length && <div style={{ color: UI.muted }}>No overlap detected with the available ETF holdings data.</div>}
+      </Card>
     </section>
   );
 }
@@ -658,7 +758,11 @@ export default function App() {
   const [history, setHistory] = useState(saved?.history || createHistory(initialTotal));
   const [activeTab, setActiveTab] = useState(saved?.activeTab || "Home");
   const [selectedTicker, setSelectedTicker] = useState(saved?.selectedTicker || "AMZN");
-  const [form, setForm] = useState({ ticker: "", name: "", type: "Stock", shares: "", buyPrice: "", fallbackPrice: "", useLivePrice: true, conviction: "Medium" });
+  const [form, setForm] = useState({ ticker: "", name: "", type: "Stock", shares: "", buyPrice: "", fallbackPrice: "", purchaseDate: todayKey(), useLivePrice: true });
+  const [overlapInputs, setOverlapInputs] = useState(saved?.overlapInputs || [
+    { id: 1, ticker: "SXR8", percent: "50" },
+    { id: 2, ticker: "SXRV", percent: "50" },
+  ]);
   const [targetForm, setTargetForm] = useState({ ticker: "", percent: "" });
   const [targetTotal, setTargetTotal] = useState(saved?.targetTotal || "7000");
   const [cashToInvest, setCashToInvest] = useState(saved?.cashToInvest || "500");
@@ -669,6 +773,7 @@ export default function App() {
   const totalCost = useMemo(() => positions.reduce((sum, position) => sum + positionCost(position), 0), [positions]);
   const totalProfit = totalValue - totalCost;
   const totalProfitPercent = totalCost ? (totalProfit / totalCost) * 100 : 0;
+  const chartHistory = useMemo(() => buildPortfolioHistoryFromPurchaseDates(positions, prices), [positions, prices]);
 
   const allocation = useMemo(() => positions.map((position) => {
     const value = positionValue(position, prices);
@@ -712,8 +817,8 @@ export default function App() {
   }).sort((a, b) => b.targetPercent - a.targetPercent);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ positions, targets, notes, scores, predictions, prices, priceMeta, history, activeTab, selectedTicker, targetTotal, cashToInvest }));
-  }, [positions, targets, notes, scores, predictions, prices, priceMeta, history, activeTab, selectedTicker, targetTotal, cashToInvest]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ positions, targets, notes, scores, predictions, prices, priceMeta, history, activeTab, selectedTicker, targetTotal, cashToInvest, overlapInputs }));
+  }, [positions, targets, notes, scores, predictions, prices, priceMeta, history, activeTab, selectedTicker, targetTotal, cashToInvest, overlapInputs]);
 
   useEffect(() => {
     setHistory((current) => {
@@ -762,7 +867,7 @@ export default function App() {
     setPositions((current) => {
       const existing = current.find((position) => position.ticker.toUpperCase() === ticker);
       if (!existing) {
-        return [...current, { id: Date.now(), ticker, name: form.name || STOCK_META[ticker]?.name || ETF_DATA[ticker]?.name || ticker, type: form.type, shares: form.shares, buyPrice: form.buyPrice || String(fallback), fallbackPrice: form.fallbackPrice || String(fallback), useLivePrice: form.useLivePrice, conviction: form.conviction || "Medium" }];
+        return [...current, { id: Date.now(), ticker, name: form.name || STOCK_META[ticker]?.name || ETF_DATA[ticker]?.name || ticker, type: form.type, shares: form.shares, buyPrice: form.buyPrice || String(fallback), fallbackPrice: form.fallbackPrice || String(fallback), purchaseDate: form.purchaseDate || todayKey(), useLivePrice: form.useLivePrice, conviction: undefined }];
       }
       const existingShares = n(existing.shares);
       const addedShares = n(form.shares);
@@ -770,10 +875,10 @@ export default function App() {
       const addedPrice = n(form.buyPrice || form.fallbackPrice || fallback);
       const newShares = existingShares + addedShares;
       const newAverage = newShares ? ((existingShares * existingAverage) + (addedShares * addedPrice)) / newShares : existingAverage;
-      return current.map((position) => position.id === existing.id ? { ...position, shares: String(newShares), buyPrice: String(newAverage), fallbackPrice: form.fallbackPrice || position.fallbackPrice, useLivePrice: form.useLivePrice, conviction: form.conviction || position.conviction || "Medium" } : position);
+      return current.map((position) => position.id === existing.id ? { ...position, shares: String(newShares), buyPrice: String(newAverage), fallbackPrice: form.fallbackPrice || position.fallbackPrice, purchaseDate: position.purchaseDate || form.purchaseDate || todayKey(), useLivePrice: form.useLivePrice, conviction: position.conviction } : position);
     });
     setTargets((current) => current.some((target) => target.ticker.toUpperCase() === ticker) ? current : [...current, { id: Date.now() + 1, ticker, percent: "0" }]);
-    setForm({ ticker: "", name: "", type: "Stock", shares: "", buyPrice: "", fallbackPrice: "", useLivePrice: true, conviction: "Medium" });
+    setForm({ ticker: "", name: "", type: "Stock", shares: "", buyPrice: "", fallbackPrice: "", purchaseDate: todayKey(), useLivePrice: true });
   }
 
   function updatePosition(id, field, value) { setPositions((current) => current.map((position) => position.id === id ? { ...position, [field]: value } : position)); }
@@ -781,7 +886,7 @@ export default function App() {
   function addSnapshot() { setHistory((current) => [...current.filter((item) => item.date !== todayKey()), { date: todayKey(), value: totalValue }].slice(-500)); }
   function resetAll() { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }
 
-  const nav = ["Home", "Portfolio", "Exposure", "Targets", "Predictions", "Notes"];
+  const nav = ["Home", "Portfolio", "Exposure", "ETF Overlap", "Targets", "Predictions", "Notes"];
 
   return (
     <main style={{ minHeight: "100vh", background: UI.bg, color: UI.text, fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text, Inter, system-ui, sans-serif", padding: isMobile ? "14px 12px 34px" : "24px 16px 48px" }}>
@@ -805,9 +910,10 @@ export default function App() {
         </nav>
         <div style={{ color: UI.muted, fontSize: 13, marginBottom: 14 }}>{priceStatus}</div>
 
-        {activeTab === "Home" && <Dashboard totalValue={totalValue} totalProfit={totalProfit} totalProfitPercent={totalProfitPercent} allocation={allocation} history={history} addSnapshot={addSnapshot} riskScore={riskScore} riskLabel={riskLabel} techExposure={techExposure} top3Weight={top3Weight} hitRate={hitRate} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />}
+        {activeTab === "Home" && <Dashboard totalValue={totalValue} totalProfit={totalProfit} totalProfitPercent={totalProfitPercent} allocation={allocation} history={chartHistory} addSnapshot={addSnapshot} riskScore={riskScore} riskLabel={riskLabel} techExposure={techExposure} top3Weight={top3Weight} hitRate={hitRate} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />}
         {activeTab === "Portfolio" && <PortfolioPanel form={form} setForm={setForm} addPosition={addPosition} allocation={allocation} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />}
         {activeTab === "Exposure" && <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: 16 }}><AllocationDonut allocation={allocation} totalValue={totalValue} /><ExposureCard title="Stock Exposure" data={stockExposure} /><ExposureCard title="Sector Exposure" data={sectorExposure} /><ExposureCard title="Currency Exposure" data={currencyExposure} /></section>}
+        {activeTab === "ETF Overlap" && <OverlapPanel overlapInputs={overlapInputs} setOverlapInputs={setOverlapInputs} />}
         {activeTab === "Targets" && <TargetsPanel targets={targets} setTargets={setTargets} targetForm={targetForm} setTargetForm={setTargetForm} targetSum={targetSum} targetTotal={targetTotal} setTargetTotal={setTargetTotal} cashToInvest={cashToInvest} setCashToInvest={setCashToInvest} rebalancePlan={rebalancePlan} />}
         {activeTab === "Predictions" && <PredictionsPanel predictions={predictions} setPredictions={setPredictions} predictionForm={predictionForm} setPredictionForm={setPredictionForm} hitRate={hitRate} />}
         {activeTab === "Notes" && <NotesPanel tickers={tickers} selectedTicker={selectedTicker} setSelectedTicker={setSelectedTicker} notes={notes} setNotes={setNotes} scores={scores} setScores={setScores} />}
