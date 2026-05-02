@@ -230,6 +230,7 @@ function buildPortfolioHistoryFromPurchaseDates(positions, prices) {
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth <= 760 : false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 760);
@@ -421,6 +422,20 @@ function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta 
           {isEditing ? "Done" : "Edit"}
         </button>
       </div>
+      <div style={{ padding: "0 22px 12px" }}>
+  <label style={{ color: "cyan", cursor: "pointer" }}>
+    {importing ? "Importing..." : "Import from screenshot"}
+    <input
+      type="file"
+      accept="image/*"
+      hidden
+      onChange={(e) => {
+        const file = e.target.files[0];
+        if (file) handleImportScreenshot(file);
+      }}
+    />
+  </label>
+</div>
 
       {allocation.map((position, index) => {
         const meta = priceMeta[position.ticker] || { status: position.useLivePrice ? "fallback" : "manual" };
@@ -763,6 +778,57 @@ export default function App() {
     { id: 1, ticker: "SXR8", percent: "50" },
     { id: 2, ticker: "SXRV", percent: "50" },
   ]);
+  async function handleImportScreenshot(file) {
+  setImporting(true);
+
+  const reader = new FileReader();
+
+  reader.onload = async () => {
+    const base64 = reader.result;
+
+    const res = await fetch("/api/import-portfolio", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ imageDataUrl: base64 }),
+    });
+
+    const data = await res.json();
+
+    if (!data.holdings) {
+      alert("Erro ao analisar imagem");
+      setImporting(false);
+      return;
+    }
+
+    const confirmed = confirm("Adicionar holdings detectadas?");
+
+    if (!confirmed) {
+      setImporting(false);
+      return;
+    }
+
+    setPositions((current) => [
+      ...current,
+      ...data.holdings.map((h, i) => ({
+        id: Date.now() + i,
+        ticker: h.ticker,
+        name: h.name,
+        type: "Stock",
+        shares: String(h.shares || ""),
+        buyPrice: String(h.buyPrice || ""),
+        fallbackPrice: "",
+        purchaseDate: todayKey(),
+        useLivePrice: true,
+      })),
+    ]);
+
+    setImporting(false);
+  };
+
+  reader.readAsDataURL(file);
+}
   const [targetForm, setTargetForm] = useState({ ticker: "", percent: "" });
   const [targetTotal, setTargetTotal] = useState(saved?.targetTotal || "7000");
   const [cashToInvest, setCashToInvest] = useState(saved?.cashToInvest || "500");
