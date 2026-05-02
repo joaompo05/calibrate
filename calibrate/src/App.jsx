@@ -230,7 +230,6 @@ function buildPortfolioHistoryFromPurchaseDates(positions, prices) {
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth <= 760 : false);
-  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 760);
@@ -407,7 +406,7 @@ function PortfolioChart({ history, totalValue, addSnapshot }) {
   );
 }
 
-function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta }) {
+function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta, handleImportScreenshot, importing }) {
   const isMobile = useIsMobile();
   const [isEditing, setIsEditing] = useState(false);
 
@@ -423,6 +422,20 @@ function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta 
         </button>
       </div>
       <div style={{ padding: "0 22px 12px" }}>
+  {handleImportScreenshot && (
+    <label style={{ color: UI.cyan, cursor: "pointer" }}>
+      {importing ? "Importing..." : "Import from screenshot"}
+      <input
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files[0];
+          if (file) handleImportScreenshot(file);
+        }}
+      />
+    </label>
+  )}
 </div>
 
       {allocation.map((position, index) => {
@@ -646,7 +659,7 @@ function Dashboard({ totalValue, totalProfit, totalProfitPercent, allocation, hi
   );
 }
 
-function PortfolioPanel({ form, setForm, addPosition, allocation, updatePosition, deletePosition, priceMeta }) {
+function PortfolioPanel({ form, setForm, addPosition, allocation, updatePosition, deletePosition, priceMeta, handleImportScreenshot, importing }) {
   const existing = allocation.find((position) => position.ticker === form.ticker.trim().toUpperCase());
   const addedShares = n(form.shares);
   const addedPrice = n(form.buyPrice || form.fallbackPrice || existing?.currentPrice || 0);
@@ -682,7 +695,14 @@ function PortfolioPanel({ form, setForm, addPosition, allocation, updatePosition
           </div>
         )}
       </Card>
-      <PositionsTable allocation={allocation} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />
+      <PositionsTable
+  allocation={allocation}
+  updatePosition={updatePosition}
+  deletePosition={deletePosition}
+  priceMeta={priceMeta}
+  handleImportScreenshot={handleImportScreenshot}
+  importing={importing}
+/>
     </section>
   );
 }
@@ -966,7 +986,19 @@ export default function App() {
         <div style={{ color: UI.muted, fontSize: 13, marginBottom: 14 }}>{priceStatus}</div>
 
         {activeTab === "Home" && <Dashboard totalValue={totalValue} totalProfit={totalProfit} totalProfitPercent={totalProfitPercent} allocation={allocation} history={chartHistory} addSnapshot={addSnapshot} riskScore={riskScore} riskLabel={riskLabel} techExposure={techExposure} top3Weight={top3Weight} hitRate={hitRate} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />}
-        {activeTab === "Portfolio" && <PortfolioPanel form={form} setForm={setForm} addPosition={addPosition} allocation={allocation} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />}
+        {activeTab === "Portfolio" && (
+  <PortfolioPanel
+    form={form}
+    setForm={setForm}
+    addPosition={addPosition}
+    allocation={allocation}
+    updatePosition={updatePosition}
+    deletePosition={deletePosition}
+    priceMeta={priceMeta}
+    handleImportScreenshot={handleImportScreenshot}
+    importing={importing}
+  />
+)}
         {activeTab === "Exposure" && <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: 16 }}><AllocationDonut allocation={allocation} totalValue={totalValue} /><ExposureCard title="Stock Exposure" data={stockExposure} /><ExposureCard title="Sector Exposure" data={sectorExposure} /><ExposureCard title="Currency Exposure" data={currencyExposure} /></section>}
         {activeTab === "ETF Overlap" && <OverlapPanel overlapInputs={overlapInputs} setOverlapInputs={setOverlapInputs} />}
         {activeTab === "Targets" && <TargetsPanel targets={targets} setTargets={setTargets} targetForm={targetForm} setTargetForm={setTargetForm} targetSum={targetSum} targetTotal={targetTotal} setTargetTotal={setTargetTotal} cashToInvest={cashToInvest} setCashToInvest={setCashToInvest} rebalancePlan={rebalancePlan} />}
