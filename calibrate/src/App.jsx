@@ -423,18 +423,6 @@ function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta 
         </button>
       </div>
       <div style={{ padding: "0 22px 12px" }}>
-  <label style={{ color: "cyan", cursor: "pointer" }}>
-    {importing ? "Importing..." : "Import from screenshot"}
-    <input
-      type="file"
-      accept="image/*"
-      hidden
-      onChange={(e) => {
-        const file = e.target.files[0];
-        if (file) handleImportScreenshot(file);
-      }}
-    />
-  </label>
 </div>
 
       {allocation.map((position, index) => {
