@@ -639,7 +639,14 @@ function Dashboard({ totalValue, totalProfit, totalProfitPercent, allocation, hi
       <section style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.45fr) minmax(310px, .85fr)", gap: 16 }}>
       <div style={{ display: "grid", gap: 16 }}>
         <PortfolioChart history={history} totalValue={totalValue} addSnapshot={addSnapshot} />
-        <PositionsTable allocation={allocation} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />
+        <PositionsTable
+  allocation={allocation}
+  updatePosition={updatePosition}
+  deletePosition={deletePosition}
+  priceMeta={priceMeta}
+  handleImportScreenshot={handleImportScreenshot}
+  importing={importing}
+/>
       </div>
       <div style={{ display: "grid", gap: 16 }}>
         <AllocationDonut allocation={allocation} totalValue={totalValue} />
