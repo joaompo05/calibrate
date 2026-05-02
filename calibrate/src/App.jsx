@@ -751,6 +751,7 @@ export default function App() {
   const isMobile = useIsMobile();
   const saved = useMemo(() => loadState(), []);
   const [positions, setPositions] = useState(saved?.positions || DEFAULT_POSITIONS);
+  const [importing, setImporting] = useState(false);
   const [targets, setTargets] = useState(saved?.targets || DEFAULT_TARGETS);
   const [notes, setNotes] = useState(saved?.notes || DEFAULT_NOTES);
   const [scores, setScores] = useState(saved?.scores || DEFAULT_SCORES);
