@@ -897,16 +897,45 @@ function Dashboard({ totalValue, totalProfit, totalProfitPercent, allocation, hi
       </div>
       <div style={{ display: "grid", gap: 16 }}>
         <AllocationDonut allocation={allocation} totalValue={totalValue} />
-        <Card style={{ padding: 22 }}>
-          <h2 style={{ margin: "0 0 14px", fontSize: 23, fontWeight: 600 }}>Risk</h2>
-          <div style={{ fontSize: 36, fontWeight: 700, color: riskLabel === "High" ? UI.red : riskLabel === "Medium" ? UI.orange : UI.green }}>{riskScore}/100</div>
-          <div style={{ color: UI.muted, margin: "6px 0 14px" }}>{riskLabel} risk</div>
-          <Bar value={riskScore} color={riskLabel === "High" ? UI.red : riskLabel === "Medium" ? UI.orange : UI.green} />
-          <p style={{ color: UI.muted, lineHeight: 1.6 }}>Top 3: {pct(top3Weight)}<br />Tech: {pct(techExposure)}<br />Hit rate: {pct(hitRate)}</p>
-          <div style={{ marginTop: 14, padding: 14, borderRadius: 16, background: UI.card2, color: UI.muted, fontSize: 13, lineHeight: 1.5 }}>
-            Risk combines concentration, top holding weight and tech exposure. Hit rate is closed predictions marked as Hit divided by all closed predictions.
-          </div>
-        </Card>
+        <Card style={{ padding: 20 }}>
+  <div style={{ fontSize: 14, color: UI.muted }}>
+    Risk (Outcome Dispersion)
+  </div>
+
+  <div style={{ fontSize: 32, fontWeight: 700, marginTop: 6 }}>
+    {riskScore.toFixed(1)} / 10
+  </div>
+
+  <div style={{
+    height: 6,
+    background: UI.card3,
+    borderRadius: 999,
+    marginTop: 10,
+    overflow: "hidden"
+  }}>
+    <div style={{
+      width: `${riskScore * 10}%`,
+      height: "100%",
+      background: UI.blue
+    }} />
+  </div>
+
+  <div style={{ color: UI.muted, fontSize: 13, marginTop: 10 }}>
+    This reflects the range of possible future outcomes.
+  </div>
+
+  <div style={{
+    marginTop: 12,
+    fontSize: 12,
+    color: UI.muted2,
+    borderTop: `1px solid ${UI.border}`,
+    paddingTop: 10
+  }}>
+    Risk is not volatility.<br />
+    It represents how wide your possible outcomes are.<br />
+    Diversification only reduces risk if outcomes are independent.
+  </div>
+</Card>
       </div>
       </section>
     </>
@@ -1069,7 +1098,8 @@ export default function App() {
   const currencyExposure = useMemo(() => getExposure(positions, prices, "currency"), [positions, prices]);
   const top3Weight = allocation.slice(0, 3).reduce((sum, position) => sum + position.percent, 0);
   const techExposure = sectorExposure.find((item) => item.name === "Technology")?.value || 0;
-  const riskScore = Math.min(100, Math.round(top3Weight * 0.55 + techExposure * 0.35 + (allocation[0]?.percent || 0) * 0.4));
+  import { calculateRisk } from "./riskModel";
+  const riskScore = calculateRisk(allocation);
   const riskLabel = riskScore >= 70 ? "High" : riskScore >= 45 ? "Medium" : "Low";
   const tickers = [...new Set([...positions.map((position) => position.ticker.toUpperCase()), ...targets.map((target) => target.ticker.toUpperCase()), ...predictions.map((prediction) => prediction.ticker.toUpperCase())])];
   const closedPredictions = predictions.filter((prediction) => prediction.status === "Closed");
