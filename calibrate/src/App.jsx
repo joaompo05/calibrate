@@ -1,6 +1,29 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+
+const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : {
+      auth: {
+        getSession: async () => ({ data: { session: null } }),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+        signUp: async () => ({ error: null }),
+        signInWithPassword: async () => ({ error: null }),
+        signOut: async () => ({ error: null }),
+      },
+      from: () => ({
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+        update: () => ({ eq: async () => ({ error: null }) }),
+        insert: async () => ({ error: null }),
+      }),
+    };
 
 const STORAGE_KEY = "calibrate_apple_stocks_v1";
+// SAFE ROLLBACK POINT: dashboard state before landing page addition.
+// To return to the old behavior, set initial screen to "dashboard" and remove LandingPage rendering.
 
 const CLASSIC_UI = {
   bg: "#000000",
@@ -12,16 +35,16 @@ const CLASSIC_UI = {
   muted2: "#636366",
   green: "#30d158",
   red: "#ff453a",
-  blue: "#0a84ff",
+  blue: "#3b5fcc",
   orange: "#ff9f0a",
-  purple: "#bf5af2",
+  purple: "#3b5fcc",
   cyan: "#64d2ff",
   border: "rgba(255,255,255,0.08)",
 };
 
 const UI = {
   ...CLASSIC_UI,
-  bg: "radial-gradient(circle at top left, rgba(10,132,255,0.18), transparent 28%), #000000",
+  bg: "radial-gradient(circle at top left, rgba(10,26,80,0.55), transparent 35%), radial-gradient(circle at top right, rgba(20,50,130,0.35), transparent 32%), #000000",
   card: "rgba(28,28,30,0.92)",
   card2: "rgba(44,44,46,0.94)",
   card3: "#3a3a3c",
@@ -29,7 +52,7 @@ const UI = {
   shadow: "0 18px 50px rgba(0,0,0,0.32)",
 };
 
-const COLORS = [UI.blue, UI.green, UI.cyan, UI.purple, UI.orange, UI.red, "#5e5ce6", "#8e8e93"];
+const COLORS = [UI.blue, UI.green, UI.cyan, UI.blue, UI.orange, UI.red, "#4c6ef5", "#8e8e93"];
 
 const ETF_DATA = {
   SXR8: {
@@ -241,9 +264,10 @@ function useIsMobile() {
   return isMobile;
 }
 
-function Card({ children, style }) {
+function Card({ children, style, ...props }) {
   return (
     <div
+      {...props}
       style={{
         background: UI.card,
         borderRadius: 26,
@@ -406,7 +430,7 @@ function PortfolioChart({ history, totalValue, addSnapshot }) {
   );
 }
 
-function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta, handleImportScreenshot, importing }) {
+function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta }) {
   const isMobile = useIsMobile();
   const [isEditing, setIsEditing] = useState(false);
 
@@ -421,22 +445,6 @@ function PositionsTable({ allocation, updatePosition, deletePosition, priceMeta,
           {isEditing ? "Done" : "Edit"}
         </button>
       </div>
-      <div style={{ padding: "0 22px 12px" }}>
-  {handleImportScreenshot && (
-    <label style={{ color: UI.cyan, cursor: "pointer" }}>
-      {importing ? "Importing..." : "Import from screenshot"}
-      <input
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => {
-          const file = e.target.files[0];
-          if (file) handleImportScreenshot(file);
-        }}
-      />
-    </label>
-  )}
-</div>
 
       {allocation.map((position, index) => {
         const meta = priceMeta[position.ticker] || { status: position.useLivePrice ? "fallback" : "manual" };
@@ -496,6 +504,9 @@ function AllocationDonut({ allocation, totalValue }) {
   const stroke = 24;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
+
+  // small gap between segments (in px along circumference)
+  const GAP = 2; 
   let offset = 0;
 
   return (
@@ -506,8 +517,10 @@ function AllocationDonut({ allocation, totalValue }) {
           <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
             <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={UI.card3} strokeWidth={stroke} />
             {holdings.map((item) => {
-              const dash = (item.value / 100) * circumference;
+              const rawDash = (item.value / 100) * circumference;
+              const dash = Math.max(rawDash - GAP, 0);
               const isActive = selectedHolding?.name === item.name;
+
               const circle = (
                 <circle
                   key={item.name}
@@ -516,15 +529,15 @@ function AllocationDonut({ allocation, totalValue }) {
                   r={radius}
                   fill="none"
                   stroke={item.color}
-                  strokeWidth={isActive ? stroke + 5 : stroke}
-                  strokeDasharray={`${dash} ${circumference - dash}`}
+                  strokeWidth={stroke}
+                  strokeDasharray={`${dash} ${circumference}`}
                   strokeDashoffset={-offset}
-                  strokeLinecap="round"
+                  strokeLinecap="butt"
                   onMouseEnter={() => setActiveHolding(item)}
-                  style={{ cursor: "pointer", opacity: selectedHolding && !isActive ? 0.45 : 1, transition: "all 0.15s ease" }}
+                  style={{ cursor: "pointer", opacity: selectedHolding && !isActive ? 0.4 : 1, transition: "opacity 0.15s ease" }}
                 />
               );
-              offset += dash;
+              offset += rawDash;
               return circle;
             })}
           </svg>
@@ -630,6 +643,212 @@ function MetricStrip({ totalValue, totalProfit, totalProfitPercent, riskScore, t
   );
 }
 
+function LandingPage({ onOpenDashboard, user, onSignOut }) {
+  const isMobile = useIsMobile();
+  const [hoveredFeature, setHoveredFeature] = useState(null);
+  const [authMode, setAuthMode] = useState(null);
+  const features = [
+    { title: "Portfolio", text: "Valor, rentabilidade e evolução numa vista limpa." },
+    { title: "Exposição real", text: "Ações, setores e moeda por baixo dos teus ETFs." },
+    { title: "ETF Overlap", text: "Percebe quando estás a repetir as mesmas empresas." },
+    { title: "Teses", text: "Notas, scorecards e previsões por ativo." },
+
+    { title: "Predictions", text: "Faz previsões e mede o teu track record ao longo do tempo." },
+    { title: "Track Record", text: "Separa skill de sorte com métricas reais de performance." },
+    { title: "Target Allocation", text: "Define objetivos e recebe planos claros de rebalanceamento." },
+    { title: "Risk Analysis", text: "Analisa concentração, exposição e risco real do portfólio." },
+  ];
+
+  return (
+    <main style={{ minHeight: "100vh", background: UI.bg, color: UI.text, fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text, Inter, system-ui, sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: "1120px", margin: "0 auto", padding: isMobile ? "20px 16px 48px" : "30px 24px 72px" }}>
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, marginBottom: isMobile ? 64 : 104 }}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <img src="/logo.png" alt="Calibrate" style={{ height: 34, objectFit: "contain" }} />
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {user ? (
+              <button onClick={onSignOut} style={{ border: `1px solid ${UI.border}`, borderRadius: 999, background: UI.card, color: UI.text, padding: "10px 15px", fontSize: 15, fontWeight: 650, cursor: "pointer" }}>Sair</button>
+            ) : (
+              <>
+                <button onClick={() => setAuthMode("signin")} style={{ border: `1px solid ${UI.border}`, borderRadius: 999, background: UI.card, color: UI.text, padding: "10px 15px", fontSize: 15, fontWeight: 650, cursor: "pointer" }}>Iniciar sessão</button>
+                <button onClick={() => setAuthMode("signup")} style={{ border: 0, borderRadius: 999, background: UI.blue, color: "white", padding: "10px 15px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Criar conta</button>
+              </>
+            )}
+            <button onClick={onOpenDashboard} style={{ border: `1px solid ${UI.border}`, borderRadius: 999, background: UI.text, color: "#000", padding: "10px 16px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Dashboard</button>
+          </div>
+        </header>
+
+        <section style={{ textAlign: "center", maxWidth: 850, margin: "0 auto", marginBottom: isMobile ? 58 : 86 }}>
+          <div style={{ color: UI.blue, fontSize: 14, fontWeight: 700, marginBottom: 18 }}>Personal Investing OS</div>
+          <h1 style={{ margin: 0, fontSize: isMobile ? 46 : 76, lineHeight: 0.96, letterSpacing: isMobile ? -2 : -4, fontWeight: 800 }}>
+            O teu portfólio,<br />com pensamento por trás.
+          </h1>
+          <p style={{ color: UI.muted, fontSize: isMobile ? 18 : 21, lineHeight: 1.45, maxWidth: 690, margin: "24px auto 0" }}>
+            Acompanha posições, exposição real, targets, overlap de ETFs, teses e previsões — sem ruído, sem complexidade desnecessária.
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap", marginTop: 32 }}>
+            <button onClick={onOpenDashboard} style={{ border: 0, borderRadius: 999, background: UI.blue, color: "white", padding: "14px 20px", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Abrir dashboard</button>
+            <a href="#features" style={{ textDecoration: "none", borderRadius: 999, background: UI.card, color: UI.text, padding: "14px 20px", fontSize: 16, fontWeight: 650, border: `1px solid ${UI.border}` }}>Ver funcionalidades</a>
+          </div>
+        </section>
+
+        <section style={{ maxWidth: 900, margin: "0 auto", marginBottom: isMobile ? 64 : 96 }}>
+          <Card style={{ padding: isMobile ? 18 : 22, borderRadius: 28, boxShadow: "0 24px 80px rgba(0,0,0,.45)", overflow: "hidden" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 22 }}>
+              <div>
+                <div style={{ color: UI.muted, fontSize: 14 }}>Portfolio</div>
+                <div style={{ fontSize: isMobile ? 42 : 54, fontWeight: 750, letterSpacing: -2 }}>€5,209</div>
+                <div style={{ color: UI.green, marginTop: 4 }}>+€731 · +16.3%</div>
+              </div>
+              <div style={{ padding: "8px 11px", borderRadius: 999, background: `${UI.green}18`, color: UI.green, fontSize: 13 }}>Live</div>
+            </div>
+            <svg viewBox="0 0 620 260" preserveAspectRatio="none" style={{ width: "100%", height: isMobile ? 210 : 260, display: "block" }}>
+              <defs>
+                <linearGradient id="landingFillClean" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={UI.green} stopOpacity="0.22" />
+                  <stop offset="100%" stopColor={UI.green} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {[65, 130, 195].map((y) => <line key={y} x1="0" x2="620" y1={y} y2={y} stroke="rgba(255,255,255,.08)" />)}
+              <polygon points="0,240 0,200 80,178 155,190 245,125 320,140 405,84 488,103 555,52 620,75 620,240" fill="url(#landingFillClean)" />
+              <polyline points="0,200 80,178 155,190 245,125 320,140 405,84 488,103 555,52 620,75" fill="none" stroke={UI.green} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            </svg>
+          </Card>
+        </section>
+
+        <section id="features" style={{ marginBottom: isMobile ? 48 : 74 }}>
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <h2 style={{ margin: 0, fontSize: isMobile ? 32 : 44, letterSpacing: -1.6 }}>Feito para investidores que pensam.</h2>
+            <p style={{ color: UI.muted, margin: "12px auto 0", maxWidth: 560, lineHeight: 1.5 }}>Menos dashboard decorativa. Mais clareza sobre decisões, risco e alocação.</p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)", gap: 14 }}>
+            {features.map((feature) => (
+              <Card
+                key={feature.title}
+                style={{
+                  padding: 22,
+                  minHeight: 148,
+                  boxShadow: hoveredFeature === feature.title ? "0 30px 80px rgba(0,0,0,.55), 0 8px 20px rgba(0,0,0,.35)" : "none",
+                  transform: hoveredFeature === feature.title ? "translateY(-6px)" : "translateY(0)",
+                  transition: "transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease",
+                  borderColor: hoveredFeature === feature.title ? "rgba(255,255,255,.16)" : UI.border,
+                  background: hoveredFeature === feature.title ? "rgba(34,34,38,0.96)" : UI.card,
+                  cursor: "default",
+                }}
+                onMouseEnter={() => setHoveredFeature(feature.title)}
+                onMouseLeave={() => setHoveredFeature(null)}
+              >
+                <h3 style={{ margin: "0 0 10px", fontSize: 18, letterSpacing: -0.4 }}>{feature.title}</h3>
+                <p style={{ color: UI.muted, lineHeight: 1.5, margin: 0, fontSize: 14 }}>{feature.text}</p>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section style={{ textAlign: "center" }}>
+          <button onClick={onOpenDashboard} style={{ border: 0, borderRadius: 999, background: UI.text, color: "#000", padding: "15px 22px", fontSize: 16, fontWeight: 800, cursor: "pointer" }}>Entrar no Calibrate</button>
+        </section>
+      </div>
+
+      {authMode && <AuthModal mode={authMode} setMode={setAuthMode} onClose={() => setAuthMode(null)} />}
+    </main>
+  );
+}
+
+function AuthModal({ mode, setMode, onClose }) {
+  const isSignUp = mode === "signup";
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function handleAuth() {
+    setMessage("");
+
+    if (!email || !password) {
+      setMessage("Preenche email e password.");
+      return;
+    }
+
+    if (isSignUp && password !== confirmPassword) {
+      setMessage("As passwords não coincidem.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { name },
+          },
+        });
+
+        if (error) throw error;
+        setMessage("Conta criada. Verifica o teu email para confirmar a conta.");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+        setMessage("Sessão iniciada com sucesso.");
+        setTimeout(onClose, 700);
+      }
+    } catch (error) {
+      setMessage(error.message || "Ocorreu um erro. Tenta novamente.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.72)", backdropFilter: "blur(14px)", display: "grid", placeItems: "center", padding: 18, zIndex: 50 }}>
+      <Card style={{ width: "100%", maxWidth: 430, padding: 24, borderRadius: 28 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16, marginBottom: 18 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 28, letterSpacing: -0.8 }}>{isSignUp ? "Criar conta" : "Iniciar sessão"}</h2>
+            <p style={{ color: UI.muted, margin: "8px 0 0", lineHeight: 1.45 }}>
+              {isSignUp ? "Guarda o teu portfólio, notas e previsões num perfil próprio." : "Entra para aceder ao teu portfólio em qualquer dispositivo."}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ border: 0, background: UI.card2, color: UI.text, borderRadius: 999, width: 34, height: 34, cursor: "pointer", fontSize: 18 }}>×</button>
+        </div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {isSignUp && <Input placeholder="Nome" value={name} onChange={(event) => setName(event.target.value)} />}
+          <Input type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          <Input type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          {isSignUp && <Input type="password" placeholder="Confirmar password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />}
+          <button onClick={handleAuth} disabled={loading} style={{ marginTop: 6, border: 0, borderRadius: 16, background: UI.blue, color: "white", padding: "14px 16px", fontSize: 16, fontWeight: 750, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? .7 : 1 }}>
+            {loading ? "A processar..." : isSignUp ? "Criar conta" : "Entrar"}
+          </button>
+        </div>
+
+        {message && (
+          <div style={{ marginTop: 14, padding: 14, borderRadius: 16, background: UI.card2, color: message.toLowerCase().includes("sucesso") || message.toLowerCase().includes("criada") ? UI.green : UI.orange, fontSize: 13, lineHeight: 1.5 }}>
+            {message}
+          </div>
+        )}
+
+        <div style={{ marginTop: 18, textAlign: "center", color: UI.muted, fontSize: 14 }}>
+          {isSignUp ? "Já tens conta? " : "Ainda não tens conta? "}
+          <button onClick={() => { setMessage(""); setMode(isSignUp ? "signin" : "signup"); }} style={{ border: 0, background: "transparent", color: UI.blue, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            {isSignUp ? "Iniciar sessão" : "Criar conta"}
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function Dashboard({ totalValue, totalProfit, totalProfitPercent, allocation, history, addSnapshot, riskScore, riskLabel, techExposure, top3Weight, hitRate, updatePosition, deletePosition, priceMeta }) {
   const isMobile = useIsMobile();
 
@@ -639,14 +858,7 @@ function Dashboard({ totalValue, totalProfit, totalProfitPercent, allocation, hi
       <section style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.45fr) minmax(310px, .85fr)", gap: 16 }}>
       <div style={{ display: "grid", gap: 16 }}>
         <PortfolioChart history={history} totalValue={totalValue} addSnapshot={addSnapshot} />
-        <PositionsTable
-  allocation={allocation}
-  updatePosition={updatePosition}
-  deletePosition={deletePosition}
-  priceMeta={priceMeta}
-  handleImportScreenshot={handleImportScreenshot}
-  importing={importing}
-/>
+        <PositionsTable allocation={allocation} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />
       </div>
       <div style={{ display: "grid", gap: 16 }}>
         <AllocationDonut allocation={allocation} totalValue={totalValue} />
@@ -666,7 +878,7 @@ function Dashboard({ totalValue, totalProfit, totalProfitPercent, allocation, hi
   );
 }
 
-function PortfolioPanel({ form, setForm, addPosition, allocation, updatePosition, deletePosition, priceMeta, handleImportScreenshot, importing }) {
+function PortfolioPanel({ form, setForm, addPosition, allocation, updatePosition, deletePosition, priceMeta }) {
   const existing = allocation.find((position) => position.ticker === form.ticker.trim().toUpperCase());
   const addedShares = n(form.shares);
   const addedPrice = n(form.buyPrice || form.fallbackPrice || existing?.currentPrice || 0);
@@ -702,14 +914,7 @@ function PortfolioPanel({ form, setForm, addPosition, allocation, updatePosition
           </div>
         )}
       </Card>
-      <PositionsTable
-  allocation={allocation}
-  updatePosition={updatePosition}
-  deletePosition={deletePosition}
-  priceMeta={priceMeta}
-  handleImportScreenshot={handleImportScreenshot}
-  importing={importing}
-/>
+      <PositionsTable allocation={allocation} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />
     </section>
   );
 }
@@ -775,10 +980,12 @@ function NotesPanel({ tickers, selectedTicker, setSelectedTicker, notes, setNote
 }
 
 export default function App() {
+  const [screen, setScreen] = useState("landing");
+  const [user, setUser] = useState(null);
+  const [cloudReady, setCloudReady] = useState(false);
   const isMobile = useIsMobile();
   const saved = useMemo(() => loadState(), []);
   const [positions, setPositions] = useState(saved?.positions || DEFAULT_POSITIONS);
-  const [importing, setImporting] = useState(false);
   const [targets, setTargets] = useState(saved?.targets || DEFAULT_TARGETS);
   const [notes, setNotes] = useState(saved?.notes || DEFAULT_NOTES);
   const [scores, setScores] = useState(saved?.scores || DEFAULT_SCORES);
@@ -794,57 +1001,6 @@ export default function App() {
     { id: 1, ticker: "SXR8", percent: "50" },
     { id: 2, ticker: "SXRV", percent: "50" },
   ]);
-  async function handleImportScreenshot(file) {
-  setImporting(true);
-
-  const reader = new FileReader();
-
-  reader.onload = async () => {
-    const base64 = reader.result;
-
-    const res = await fetch("/api/import-portfolio", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ imageDataUrl: base64 }),
-    });
-
-    const data = await res.json();
-
-    if (!data.holdings) {
-      alert("Erro ao analisar imagem");
-      setImporting(false);
-      return;
-    }
-
-    const confirmed = confirm("Adicionar holdings detectadas?");
-
-    if (!confirmed) {
-      setImporting(false);
-      return;
-    }
-
-    setPositions((current) => [
-      ...current,
-      ...data.holdings.map((h, i) => ({
-        id: Date.now() + i,
-        ticker: h.ticker,
-        name: h.name,
-        type: "Stock",
-        shares: String(h.shares || ""),
-        buyPrice: String(h.buyPrice || ""),
-        fallbackPrice: "",
-        purchaseDate: todayKey(),
-        useLivePrice: true,
-      })),
-    ]);
-
-    setImporting(false);
-  };
-
-  reader.readAsDataURL(file);
-}
   const [targetForm, setTargetForm] = useState({ ticker: "", percent: "" });
   const [targetTotal, setTargetTotal] = useState(saved?.targetTotal || "7000");
   const [cashToInvest, setCashToInvest] = useState(saved?.cashToInvest || "500");
@@ -899,8 +1055,17 @@ export default function App() {
   }).sort((a, b) => b.targetPercent - a.targetPercent);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ positions, targets, notes, scores, predictions, prices, priceMeta, history, activeTab, selectedTicker, targetTotal, cashToInvest, overlapInputs }));
-  }, [positions, targets, notes, scores, predictions, prices, priceMeta, history, activeTab, selectedTicker, targetTotal, cashToInvest, overlapInputs]);
+    const data = getPortfolioData();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+    if (!user || !cloudReady) return;
+
+    const timer = setTimeout(() => {
+      savePortfolioToCloud(data);
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [positions, targets, notes, scores, predictions, prices, priceMeta, history, activeTab, selectedTicker, targetTotal, cashToInvest, overlapInputs, user, cloudReady]);
 
   useEffect(() => {
     setHistory((current) => {
@@ -917,6 +1082,111 @@ export default function App() {
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user || null);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setCloudReady(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadCloudPortfolio() {
+      const { data, error } = await supabase
+        .from("portfolios")
+        .select("id,data")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Failed to load cloud portfolio", error);
+        setCloudReady(true);
+        return;
+      }
+
+      if (data?.data) {
+        applyPortfolioData(data.data);
+      } else {
+        await savePortfolioToCloud(getPortfolioData());
+      }
+
+      setCloudReady(true);
+    }
+
+    loadCloudPortfolio();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  function getPortfolioData() {
+    return { positions, targets, notes, scores, predictions, prices, priceMeta, history, activeTab, selectedTicker, targetTotal, cashToInvest, overlapInputs };
+  }
+
+  function applyPortfolioData(data) {
+    if (data.positions) setPositions(data.positions);
+    if (data.targets) setTargets(data.targets);
+    if (data.notes) setNotes(data.notes);
+    if (data.scores) setScores(data.scores);
+    if (data.predictions) setPredictions(data.predictions);
+    if (data.prices) setPrices(data.prices);
+    if (data.priceMeta) setPriceMeta(data.priceMeta);
+    if (data.history) setHistory(data.history);
+    if (data.activeTab) setActiveTab(data.activeTab);
+    if (data.selectedTicker) setSelectedTicker(data.selectedTicker);
+    if (data.targetTotal) setTargetTotal(data.targetTotal);
+    if (data.cashToInvest) setCashToInvest(data.cashToInvest);
+    if (data.overlapInputs) setOverlapInputs(data.overlapInputs);
+  }
+
+  async function savePortfolioToCloud(data) {
+    if (!user) return;
+
+    const { data: existing, error: selectError } = await supabase
+      .from("portfolios")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (selectError) {
+      console.error("Cloud select error", selectError);
+      return;
+    }
+
+    if (existing?.id) {
+      const { error } = await supabase
+        .from("portfolios")
+        .update({ data, updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      if (error) console.error("Cloud update error", error);
+    } else {
+      const { error } = await supabase
+        .from("portfolios")
+        .insert({ user_id: user.id, data, updated_at: new Date().toISOString() });
+      if (error) console.error("Cloud insert error", error);
+    }
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    setUser(null);
+    setCloudReady(false);
+  }
 
   async function refreshPrices() {
     setPriceStatus("Refreshing prices...");
@@ -970,13 +1240,16 @@ export default function App() {
 
   const nav = ["Home", "Portfolio", "Exposure", "ETF Overlap", "Targets", "Predictions", "Notes"];
 
+  if (screen === "landing") {
+    return <LandingPage onOpenDashboard={() => setScreen("dashboard")} user={user} onSignOut={handleSignOut} />;
+  }
+
   return (
     <main style={{ minHeight: "100vh", background: UI.bg, color: UI.text, fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text, Inter, system-ui, sans-serif", padding: isMobile ? "14px 12px 34px" : "24px 16px 48px" }}>
       <div style={{ width: "100%", maxWidth: "1540px", margin: "0 auto" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, flexWrap: "wrap", marginBottom: 22, flexDirection: isMobile ? "column" : "row" }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: "clamp(34px, 8vw, 48px)", letterSpacing: -1.5, fontWeight: 700 }}>Calibrate</h1>
-            <p style={{ color: UI.muted, margin: "6px 0 0", fontSize: 17 }}>Your personal investing operating system</p>
+          <div onClick={() => setScreen("landing")} style={{ cursor: "pointer" }}>
+            <img src="/logo.png" alt="Calibrate" style={{ height: 42, objectFit: "contain" }} />
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ color: UI.muted, fontSize: 14 }}>Total</div>
@@ -990,22 +1263,10 @@ export default function App() {
           <button onClick={refreshPrices} style={{ border: 0, borderRadius: 999, padding: "9px 14px", background: UI.card, color: UI.blue, whiteSpace: "nowrap", cursor: "pointer" }}>Refresh</button>
           <button onClick={resetAll} style={{ border: 0, borderRadius: 999, padding: "9px 14px", background: UI.card, color: UI.red, whiteSpace: "nowrap", cursor: "pointer" }}>Reset</button>
         </nav>
-        <div style={{ color: UI.muted, fontSize: 13, marginBottom: 14 }}>{priceStatus}</div>
+        <div style={{ color: UI.muted, fontSize: 13, marginBottom: 14 }}>{user ? `Signed in · Cloud sync ${cloudReady ? "active" : "loading"}` : "Not signed in · using local storage"} · {priceStatus}</div>
 
         {activeTab === "Home" && <Dashboard totalValue={totalValue} totalProfit={totalProfit} totalProfitPercent={totalProfitPercent} allocation={allocation} history={chartHistory} addSnapshot={addSnapshot} riskScore={riskScore} riskLabel={riskLabel} techExposure={techExposure} top3Weight={top3Weight} hitRate={hitRate} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />}
-        {activeTab === "Portfolio" && (
-  <PortfolioPanel
-    form={form}
-    setForm={setForm}
-    addPosition={addPosition}
-    allocation={allocation}
-    updatePosition={updatePosition}
-    deletePosition={deletePosition}
-    priceMeta={priceMeta}
-    handleImportScreenshot={handleImportScreenshot}
-    importing={importing}
-  />
-)}
+        {activeTab === "Portfolio" && <PortfolioPanel form={form} setForm={setForm} addPosition={addPosition} allocation={allocation} updatePosition={updatePosition} deletePosition={deletePosition} priceMeta={priceMeta} />}
         {activeTab === "Exposure" && <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: 16 }}><AllocationDonut allocation={allocation} totalValue={totalValue} /><ExposureCard title="Stock Exposure" data={stockExposure} /><ExposureCard title="Sector Exposure" data={sectorExposure} /><ExposureCard title="Currency Exposure" data={currencyExposure} /></section>}
         {activeTab === "ETF Overlap" && <OverlapPanel overlapInputs={overlapInputs} setOverlapInputs={setOverlapInputs} />}
         {activeTab === "Targets" && <TargetsPanel targets={targets} setTargets={setTargets} targetForm={targetForm} setTargetForm={setTargetForm} targetSum={targetSum} targetTotal={targetTotal} setTargetTotal={setTargetTotal} cashToInvest={cashToInvest} setCashToInvest={setCashToInvest} rebalancePlan={rebalancePlan} />}
