@@ -264,6 +264,38 @@ function useIsMobile() {
   return isMobile;
 }
 
+function GlobalStyles() {
+  return (
+    <style>{`
+      html, body, #root {
+        width: 100%;
+        min-width: 100%;
+        min-height: 100%;
+        margin: 0;
+        padding: 0;
+        background: #000;
+      }
+
+      body {
+        display: block !important;
+        place-items: initial !important;
+        overflow-x: hidden;
+      }
+
+      #root {
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        text-align: initial !important;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+    `}</style>
+  );
+}
+
 function Card({ children, style, ...props }) {
   return (
     <div
@@ -660,7 +692,9 @@ function LandingPage({ onOpenDashboard, user, onSignOut }) {
   ];
 
   return (
-    <main style={{ minHeight: "100vh", background: UI.bg, color: UI.text, fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text, Inter, system-ui, sans-serif" }}>
+    <>
+    <GlobalStyles />
+    <main style={{ minHeight: "100vh", width: "100vw", background: UI.bg, color: UI.text, fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text, Inter, system-ui, sans-serif" }}>
       <div style={{ width: "100%", boxSizing: "border-box", padding: isMobile ? "20px 18px 48px" : "30px 7vw 72px" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, marginBottom: isMobile ? 64 : 104, width: "100%" }}>
           <div style={{ display: "flex", alignItems: "center" }}>
@@ -753,6 +787,7 @@ function LandingPage({ onOpenDashboard, user, onSignOut }) {
 
       {authMode && <AuthModal mode={authMode} setMode={setAuthMode} onClose={() => setAuthMode(null)} />}
     </main>
+    </>
   );
 }
 
@@ -1245,7 +1280,9 @@ export default function App() {
   }
 
   return (
-    <main style={{ minHeight: "100vh", background: UI.bg, color: UI.text, fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text, Inter, system-ui, sans-serif", padding: isMobile ? "14px 12px 34px" : "24px 16px 48px" }}>
+    <>
+    <GlobalStyles />
+    <main style={{ minHeight: "100vh", width: "100vw", background: UI.bg, color: UI.text, fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text, Inter, system-ui, sans-serif", padding: isMobile ? "14px 12px 34px" : "24px 16px 48px" }}>
       <div style={{ width: "100%", maxWidth: "1540px", margin: "0 auto" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, flexWrap: "wrap", marginBottom: 22, flexDirection: isMobile ? "column" : "row" }}>
           <div onClick={() => setScreen("landing")} style={{ cursor: "pointer" }}>
@@ -1274,5 +1311,6 @@ export default function App() {
         {activeTab === "Notes" && <NotesPanel tickers={tickers} selectedTicker={selectedTicker} setSelectedTicker={setSelectedTicker} notes={notes} setNotes={setNotes} scores={scores} setScores={setScores} />}
       </div>
     </main>
+    </>
   );
 }
