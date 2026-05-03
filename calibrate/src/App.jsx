@@ -661,8 +661,8 @@ function LandingPage({ onOpenDashboard, user, onSignOut }) {
 
   return (
     <main style={{ minHeight: "100vh", background: UI.bg, color: UI.text, fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text, Inter, system-ui, sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: "1120px", margin: "0 auto", padding: isMobile ? "20px 16px 48px" : "30px 24px 72px" }}>
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, marginBottom: isMobile ? 64 : 104 }}>
+      <div style={{ width: "100%", boxSizing: "border-box", padding: isMobile ? "20px 18px 48px" : "30px 7vw 72px" }}>
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, marginBottom: isMobile ? 64 : 104, width: "100%" }}>
           <div style={{ display: "flex", alignItems: "center" }}>
             <img src="/logo.png" alt="Calibrate" style={{ height: 34, objectFit: "contain" }} />
           </div>
@@ -679,7 +679,7 @@ function LandingPage({ onOpenDashboard, user, onSignOut }) {
           </div>
         </header>
 
-        <section style={{ textAlign: "center", maxWidth: 850, margin: "0 auto", marginBottom: isMobile ? 58 : 86 }}>
+        <section style={{ textAlign: "center", maxWidth: 980, margin: "0 auto", marginBottom: isMobile ? 58 : 86 }}>
           <div style={{ color: UI.blue, fontSize: 14, fontWeight: 700, marginBottom: 18 }}>Personal Investing OS</div>
           <h1 style={{ margin: 0, fontSize: isMobile ? 46 : 76, lineHeight: 0.96, letterSpacing: isMobile ? -2 : -4, fontWeight: 800 }}>
             O teu portfólio,<br />com pensamento por trás.
@@ -693,7 +693,7 @@ function LandingPage({ onOpenDashboard, user, onSignOut }) {
           </div>
         </section>
 
-        <section style={{ maxWidth: 900, margin: "0 auto", marginBottom: isMobile ? 64 : 96 }}>
+        <section style={{ maxWidth: 1180, margin: "0 auto", marginBottom: isMobile ? 64 : 96 }}>
           <Card style={{ padding: isMobile ? 18 : 22, borderRadius: 28, boxShadow: "0 24px 80px rgba(0,0,0,.45)", overflow: "hidden" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 22 }}>
               <div>
@@ -722,7 +722,7 @@ function LandingPage({ onOpenDashboard, user, onSignOut }) {
             <h2 style={{ margin: 0, fontSize: isMobile ? 32 : 44, letterSpacing: -1.6 }}>Feito para investidores que pensam.</h2>
             <p style={{ color: UI.muted, margin: "12px auto 0", maxWidth: 560, lineHeight: 1.5 }}>Menos dashboard decorativa. Mais clareza sobre decisões, risco e alocação.</p>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: 18, maxWidth: 1180, margin: "0 auto" }}>
             {features.map((feature) => (
               <Card
                 key={feature.title}
